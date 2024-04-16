@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shaders - Solar System</title>
+  <style>
+    body {
+      margin: 0;
+    }
+
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+
+<body>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/postprocessing/EffectComposer.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/postprocessing/RenderPass.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/postprocessing/UnrealBloomPass.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/shaders/LuminosityHighPassShader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/shaders/CopyShader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/postprocessing/ShaderPass.js"></script>
+  <script src="https://unpkg.com/three@0.132.2/examples/js/loaders/GLTFLoader.js"></script>
+  <script>
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+    const loader = new THREE.TextureLoader();
+
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+    directionalLight.position.set(0, 0.5, 0).normalize();
+    scene.add(directionalLight);
+
+
+    const starCount = 1000;
+    const starGeometry = new THREE.SphereGeometry(0.1, 16, 16);
+    const starMaterial = new THREE.MeshBasicMaterial({ color: 0xaaaaaa });
+    for (let i = 0; i < starCount; i++) {
+      const star = new THREE.Mesh(starGeometry, starMaterial);
+      star.position.set(Math.random() * 100 - 50, Math.random() * 100 - 50, Math.random() * 100 - 80);
+      scene.add(star);
+    }
+
+    const sunGeometry = new THREE.SphereGeometry(1, 32, 32);
+    const texture_sun = loader.load("./2k_sun.jpg");
+    const sunMaterial = new THREE.MeshBasicMaterial({ map: texture_sun, emissive: 0xffff00 });
+    const sun = new THREE.Mesh(sunGeometry, sunMaterial);
+    scene.add(sun);
+
+    const renderScene = new THREE.RenderPass(scene, camera);
+    const bloomPass = new THREE.UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      1.5,
+      0.4,
+      0.85
+    );
+    bloomPass.threshold = 0;
+    bloomPass.strength = 1.1;
+    bloomPass.radius = 0;
+    const bloomComposer = new THREE.EffectComposer(renderer);
+    bloomComposer.setSize(window.innerWidth, window.innerHeight);
+    bloomComposer.renderToScreen = false;
+
+    const sunComposer = new THREE.EffectComposer(renderer);
+    sunComposer.setSize(window.innerWidth, window.innerHeight);
+    sunComposer.addPass(renderScene);
+    sunComposer.addPass(bloomPass);
+
+
+    const texture_earth = loader.load("./2k_earth_daymap.jpg");
+    const planetOrbitRadius = 5;
+    const planetGeometry = new THREE.SphereGeometry(0.5, 32, 32);
+    const planetMaterial = new THREE.MeshBasicMaterial({ map: texture_earth });
+    const planet = new THREE.Mesh(planetGeometry, planetMaterial);
+    scene.add(planet);
+
+    const moonOrbitRadius = 1;
+    const texture_moon = loader.load("./2k_moon.jpg");
+    const moonGeometry = new THREE.SphereGeometry(0.2, 32, 32);
+    const moonMaterial = new THREE.MeshBasicMaterial({ map: texture_moon });
+    const moon = new THREE.Mesh(moonGeometry, moonMaterial);
+    scene.add(moon);
+
+    planet.position.set(planetOrbitRadius, 0, 0);
+    moon.position.set(planetOrbitRadius + moonOrbitRadius, 0, 0);
+
+    const particleCount = 3000;
+    const positions = new Float32Array(particleCount * 3);
+    const radius = 1.6;
+    for (let i = 0; i < positions.length; i += 3) {
+      positions[i] = (Math.random() - 0.5) * radius;
+      positions[i + 1] = (Math.random() - 0.5) * radius;
+      positions[i + 2] = (Math.random() - 0.5) * radius;
+    }
+
+    const vertexShader = `
+            void main() {
+                gl_PointSize = 3.0;
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+        `;
+
+    const fragmentShader = `
+            void main() {
+                gl_FragColor = vec4(1.0, 0.5, 0.0, 0.1);
+            }
+        `;
+
+    const particleMaterialShader = new THREE.ShaderMaterial({
+      vertexShader: vertexShader,
+      fragmentShader: fragmentShader,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+
+    const particleGeometry = new THREE.BufferGeometry();
+    particleGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+
+    const particleMaterial = new THREE.PointsMaterial({ color: 0xff0000, size: 0.02 });
+    const particleSystem = new THREE.Points(particleGeometry, particleMaterialShader);
+
+    scene.add(particleSystem);
+
+    const keyboardState = {};
+    window.addEventListener('keydown', (event) => {
+      keyboardState[event.key] = true;
+    });
+    window.addEventListener('keyup', (event) => {
+      keyboardState[event.key] = false;
+    });
+
+    function updateCameraPosition() {
+      const speed = 0.1;
+      if (keyboardState['ArrowUp'] || keyboardState['w']) {
+        camera.position.y += speed;
+      }
+      if (keyboardState['ArrowDown'] || keyboardState['s']) {
+        camera.position.y -= speed;
+      }
+      if (keyboardState['ArrowLeft'] || keyboardState['a']) {
+        camera.position.z -= speed;
+      }
+      if (keyboardState['ArrowRight'] || keyboardState['d']) {
+        camera.position.z += speed;
+      }
+    }
+
+    function animate() {
+
+      sun.rotation.y += 0.01;
+      const positions = particleSystem.geometry.attributes.position.array;
+      for (let i = 0; i < positions.length; i += 3) {
+        positions[i] += (Math.random() - 0.5) * 0.02;
+        positions[i + 1] += (Math.random() - 0.5) * 0.02;
+        positions[i + 2] += (Math.random() - 0.5) * 0.02;
+      }
+      particleSystem.geometry.attributes.position.needsUpdate = true;
+
+      sunComposer.render(); // Render only the sun with bloom effect
+
+      requestAnimationFrame(animate);
+
+      planet.position.x = Math.cos(Date.now() * 0.001) * planetOrbitRadius;
+      planet.position.z = Math.sin(Date.now() * 0.001) * planetOrbitRadius;
+
+      moon.position.x = planet.position.x + Math.cos(Date.now() * 0.003) * moonOrbitRadius;
+      moon.position.z = planet.position.z + Math.sin(Date.now() * 0.003) * moonOrbitRadius;
+
+      updateCameraPosition();
+
+      // renderer.render(scene, camera);
+    }
+
+    camera.position.z = 10;
+    camera.position.set(3, 6, 8);
+    camera.lookAt(scene.position);
+    animate();
+  </script>
+</body>
+
+</html>
