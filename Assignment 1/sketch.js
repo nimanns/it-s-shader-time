@@ -9,15 +9,28 @@ Description: The user can control the speed of rotation using the number keys on
 let angle = 0;
 let rotation_speed = 0.01;
 const color_rate = 0.5;
+let _text;
 
 function setup() {
   createCanvas(window.innerWidth, window.innerHeight, WEBGL);
   colorMode(HSB);
+
+  _text = createGraphics(window.innerWidth - 4, window.innerHeight - 4);
+  _text.textFont("Source Code Pro");
+  _text.textAlign(CENTER);
+  _text.textSize(32);
+  _text.fill(3, 7, 11);
+  _text.noStroke();
+  _text.text(
+    "Use 0-9 keyboard keys to control speed",
+    width * 0.5,
+    height * 0.9
+  );
 }
 
 function draw() {
   background(220);
-
+  push();
   rotateX(angle);
   rotateY(angle * 0.3);
 
@@ -42,6 +55,10 @@ function draw() {
   vertex(0, 100, 0);
 
   endShape();
+  pop();
+  noStroke();
+  texture(_text);
+  plane(window.innerWidth - 4, window.innerHeight - 4);
 
   angle += rotation_speed;
 }
